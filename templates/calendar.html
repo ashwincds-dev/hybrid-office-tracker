@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Calendar - Office Tracker{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="text-white mb-4">
+            <i class="bi bi-calendar"></i> My Calendar
+        </h1>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title mb-4">Your Location History</h5>
+                
+                {% if responses %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Day</th>
+                                    <th>Location</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for response in responses %}
+                                {% set response_date = response['date'] %}
+                                {% set today_date = start_date.__class__.today() %}
+                                <tr>
+                                    <td>{{ response_date }}</td>
+                                    <td>
+                                        {% set day_of_week = response_date|string %}
+                                        {{ ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][response_date.weekday()] if response_date is not string else 'N/A' }}
+                                    </td>
+                                    <td>
+                                        <span style="font-size: 1.5rem;">{{ response['emoji'] }}</span>
+                                        {{ response['name'] }}
+                                    </td>
+                                    <td>
+                                        {% if response_date < today_date %}
+                                            <span class="badge bg-secondary">Past</span>
+                                        {% elif response_date == today_date %}
+                                            <span class="badge bg-success">Today</span>
+                                        {% else %}
+                                            <span class="badge bg-primary">Upcoming</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> 
+                        No location history found. Start by setting your location on the dashboard!
+                    </div>
+                {% endif %}
+                
+                <div class="text-center mt-4">
+                    <a href="{{ url_for('dashboard') }}" class="btn btn-primary">
+                        <i class="bi bi-arrow-left"></i> Back to Dashboard
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

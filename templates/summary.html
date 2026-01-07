@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}Summary - Office Tracker{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="text-white mb-4">
+            <i class="bi bi-list-ul"></i> Office Summary
+            <small class="text-white-50">{{ date.strftime('%B %d, %Y') }}</small>
+        </h1>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Summary Cards -->
+    {% for location in summary %}
+    <div class="col-md-4 mb-3">
+        <div class="card h-100">
+            <div class="card-body text-center" style="border-top: 4px solid {{ location['color'] }}">
+                <div style="font-size: 3rem;">{{ location['emoji'] }}</div>
+                <h3>{{ location['count'] }}</h3>
+                <h5>{{ location['name'] }}</h5>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Detailed List</h5>
+                
+                {% if detailed_list %}
+                    <div class="row">
+                        {% set current_location = namespace(name='') %}
+                        {% for member in detailed_list %}
+                            {% if current_location.name != member['location_name'] %}
+                                {% if not loop.first %}
+                                    </ul></div></div>
+                                {% endif %}
+                                {% set current_location.name = member['location_name'] %}
+                                <div class="col-md-6 mb-3">
+                                    <div class="p-3" style="background-color: {{ member['color'] }}15; border-left: 4px solid {{ member['color'] }}; border-radius: 8px;">
+                                        <h6 class="mb-2">
+                                            <span style="font-size: 1.5rem;">{{ member['emoji'] }}</span>
+                                            {{ member['location_name'] }}
+                                        </h6>
+                                        <ul class="list-unstyled ms-3">
+                            {% endif %}
+                            <li class="mb-1">
+                                <i class="bi bi-person-fill"></i> {{ member['user_name'] }}
+                            </li>
+                        {% endfor %}
+                        {% if detailed_list %}
+                            </ul></div></div>
+                        {% endif %}
+                    </div>
+                {% else %}
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> 
+                        No responses recorded for this date.
+                    </div>
+                {% endif %}
+                
+                {% if no_response %}
+                    <hr>
+                    <h6 class="text-muted">No Response Yet:</h6>
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i> 
+                        {% for user in no_response %}
+                            <span class="badge bg-warning text-dark">{{ user['name'] }}</span>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                
+                <div class="text-center mt-4">
+                    <a href="{{ url_for('dashboard') }}" class="btn btn-primary">
+                        <i class="bi bi-arrow-left"></i> Back to Dashboard
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

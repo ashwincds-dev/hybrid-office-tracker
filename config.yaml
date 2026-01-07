@@ -1,0 +1,34 @@
+schedule:
+  evening_reminder: "19:00"  # 7 PM - Send reminders
+  timezone: "Asia/Kolkata"  # IST timezone
+  skip_weekends: true
+
+app:
+  name: "Hybrid Office Tracker"
+  company: "Your Company Name"
+
+offices:
+  - name: "HSR Office"
+    emoji: "🏢"
+    color: "#4CAF50"
+  - name: "MDP Office"
+    emoji: "🏛️"
+    color: "#2196F3"
+  - name: "Intuit Office"
+    emoji: "🏭"
+    color: "#FF9800"
+  - name: "Work From Home"
+    emoji: "🏠"
+    color: "#9C27B0"
+  - name: "Day Off"
+    emoji: "🌴"
+    color: "#F44336"
+
+# Email settings (for notifications)
+email:
+  enabled: false
+  smtp_host: "smtp.gmail.com"
+  smtp_port: 587
+  from_email: "noreply@company.com"
+  from_name: "Office Tracker"
+

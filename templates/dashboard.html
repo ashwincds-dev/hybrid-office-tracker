@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Office Tracker{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="text-white mb-4">
+            <i class="bi bi-house-door"></i> Dashboard
+        </h1>
+    </div>
+</div>
+
+<!-- User's Current Status -->
+<div class="row">
+    <!-- Today's Location -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="bi bi-calendar-day"></i> Today ({{ today.strftime('%b %d, %Y') }})
+                </h5>
+                {% if today_location %}
+                    <div class="text-center py-3">
+                        <div style="font-size: 4rem;">{{ today_location['emoji'] }}</div>
+                        <h3>{{ today_location['name'] }}</h3>
+                        <span class="badge" style="background-color: {{ today_location['color'] }}">Current Location</span>
+                    </div>
+                {% else %}
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i> 
+                        You haven't set your location for today
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tomorrow's Location -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="bi bi-calendar-plus"></i> Tomorrow ({{ tomorrow.strftime('%b %d, %Y') }})
+                </h5>
+                {% if tomorrow_location %}
+                    <div class="text-center py-3">
+                        <div style="font-size: 4rem;">{{ tomorrow_location['emoji'] }}</div>
+                        <h3>{{ tomorrow_location['name'] }}</h3>
+                        <span class="badge" style="background-color: {{ tomorrow_location['color'] }}">Planned</span>
+                    </div>
+                    <button class="btn btn-outline-primary w-100 mt-3" data-bs-toggle="modal" data-bs-target="#setLocationModal">
+                        <i class="bi bi-pencil"></i> Change Location
+                    </button>
+                {% else %}
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> 
+                        Please set your location for tomorrow
+                    </div>
+                    <button class="btn btn-primary w-100" data-bs-toggle="modal" data-bs-target="#setLocationModal">
+                        <i class="bi bi-plus-circle"></i> Set Location for Tomorrow
+                    </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Today's Team Summary -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="bi bi-people"></i> Team Locations Today
+                </h5>
+                
+                {% if today_summary %}
+                    <!-- Summary Stats -->
+                    <div class="row text-center mb-4">
+                        {% for location in today_summary %}
+                        <div class="col-md-{{ 12 // (today_summary|length if today_summary|length <= 4 else 4) }}">
+                            <div class="p-3">
+                                <div style="font-size: 2.5rem;">{{ location['emoji'] }}</div>
+                                <h4 class="mb-0">{{ location['count'] }}</h4>
+                                <p class="text-muted mb-0">{{ location['name'] }}</p>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    
+                    <hr>
+                    
+                    <!-- Detailed List -->
+                    <h6 class="text-muted mb-3">Team Members:</h6>
+                    <div class="row">
+                        {% set current_location = namespace(name='') %}
+                        {% for member in team_locations %}
+                            {% if current_location.name != member['location_name'] %}
+                                {% if not loop.first %}
+                                    </div></div>
+                                {% endif %}
+                                {% set current_location.name = member['location_name'] %}
+                                <div class="col-md-6 mb-3">
+                                    <div class="p-3" style="background-color: {{ member['color'] }}15; border-left: 4px solid {{ member['color'] }}; border-radius: 8px;">
+                                        <h6 class="mb-2">
+                                            <span style="font-size: 1.5rem;">{{ member['emoji'] }}</span>
+                                            {{ member['location_name'] }}
+                                        </h6>
+                            {% endif %}
+                            <div class="ms-3 mb-1">
+                                <i class="bi bi-person"></i> {{ member['user_name'] }}
+                            </div>
+                        {% endfor %}
+                        {% if team_locations %}
+                            </div></div>
+                        {% endif %}
+                    </div>
+                {% else %}
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> 
+                        No one has set their location for today yet.
+                    </div>
+                {% endif %}
+                
+                <div class="text-center mt-3">
+                    <a href="{{ url_for('summary', date_str=today.strftime('%Y-%m-%d')) }}" class="btn btn-outline-primary">
+                        <i class="bi bi-list-ul"></i> View Full Summary
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Set Location Modal -->
+<div class="modal fade" id="setLocationModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-geo-alt"></i> Set Your Location
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="{{ url_for('set_location') }}">
+                    <input type="hidden" name="date" value="{{ tomorrow.strftime('%Y-%m-%d') }}">
+                    
+                    <p class="text-muted mb-3">Where will you be tomorrow?</p>
+                    
+                    <div class="d-grid gap-2">
+                        {% for location in locations %}
+                        <button type="submit" name="location_id" value="{{ location['id'] }}" 
+                                class="btn btn-location text-start" 
+                                style="background-color: {{ location['color'] }}15; border: 2px solid {{ location['color'] }}; color: #333;">
+                            <span style="font-size: 1.5rem;">{{ location['emoji'] }}</span>
+                            <strong>{{ location['name'] }}</strong>
+                        </button>
+                        {% endfor %}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
