@@ -33,10 +33,9 @@
                                 {% set response_date = response['date'] %}
                                 {% set today_date = start_date.__class__.today() %}
                                 <tr>
-                                    <td>{{ response_date }}</td>
+                                    <td>{{ response_date.strftime('%Y-%m-%d') if response_date else 'N/A' }}</td>
                                     <td>
-                                        {% set day_of_week = response_date|string %}
-                                        {{ ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][response_date.weekday()] if response_date is not string else 'N/A' }}
+                                        {{ ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][response_date.weekday()] if response_date else 'N/A' }}
                                     </td>
                                     <td>
                                         <span style="font-size: 1.5rem;">{{ response['emoji'] }}</span>

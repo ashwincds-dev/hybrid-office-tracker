@@ -700,7 +700,7 @@ def export_calendar():
             row_date = datetime.strptime(row['date'], '%Y-%m-%d').date() if isinstance(row['date'], str) else row['date']
             day_name = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][row_date.weekday()]
             writer.writerow([
-                row['date'],
+                row_date.strftime('%Y-%m-%d'),  # Ensure consistent date format
                 day_name,
                 row['user_name'],
                 row['user_email'],
@@ -721,7 +721,8 @@ def export_calendar():
         # Group by date for better visualization
         data_by_date = {}
         for row in data:
-            row_date = row['date']
+            # Ensure row_date is a date object for template compatibility
+            row_date = datetime.strptime(row['date'], '%Y-%m-%d').date() if isinstance(row['date'], str) else row['date']
             if row_date not in data_by_date:
                 data_by_date[row_date] = []
             data_by_date[row_date].append(row)
@@ -754,7 +755,7 @@ def api_summary(date_str):
     
     cursor.execute('''
         SELECT l.name, l.emoji, l.color, COUNT(*) as count,
-               GROUP_CONCAT(u.name, ', ') as users
+               STRING_AGG(u.name, ', ') as users
         FROM responses r
         JOIN users u ON r.user_id = u.id
         JOIN locations l ON r.location_id = l.id

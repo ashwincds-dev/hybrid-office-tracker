@@ -33,13 +33,10 @@
                     <div class="mb-4">
                         <h5 class="mb-3">
                             <i class="bi bi-calendar-day"></i> 
-                            {{ report_date }}
-                            {% set date_obj = report_date|string %}
-                            {% if date_obj %}
-                                <span class="text-muted">
-                                    - {{ ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][entries[0]['date']|string|length % 7] if entries else '' }}
-                                </span>
-                            {% endif %}
+                            {{ report_date.strftime('%Y-%m-%d') if report_date else 'N/A' }}
+                            <span class="text-muted">
+                                - {{ ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][report_date.weekday()] if report_date else '' }}
+                            </span>
                         </h5>
                         
                         <!-- Group by location -->

@@ -294,7 +294,7 @@ function setViewNextMonday() {
                                         <span class="badge bg-warning">Inactive</span>
                                     {% endif %}
                                 </td>
-                                <td>{{ user['created_at'][:10] }}</td>
+                                <td>{{ user['created_at'].strftime('%Y-%m-%d') if user['created_at'] else 'N/A' }}</td>
                                 <td>
                                     <form method="POST" action="{{ url_for('toggle_user', user_id=user['id']) }}" 
                                           style="display: inline;">
