@@ -63,7 +63,7 @@ def init_db():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS locations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
+            name TEXT NOT NULL UNIQUE,
             emoji TEXT NOT NULL,
             color TEXT NOT NULL,
             is_active BOOLEAN DEFAULT 1
@@ -103,31 +103,57 @@ def init_db():
     conn.close()
 
 
+def cleanup_duplicate_locations():
+    """Remove duplicate locations, keep only the first occurrence"""
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    try:
+        # Get all location names with their first ID
+        cursor.execute('''
+            SELECT name, MIN(id) as keep_id
+            FROM locations
+            GROUP BY name
+            HAVING COUNT(*) > 1
+        ''')
+        duplicates = cursor.fetchall()
+        
+        for dup in duplicates:
+            # Delete all duplicates except the first one
+            cursor.execute('''
+                DELETE FROM locations 
+                WHERE name = ? AND id != ?
+            ''', (dup['name'], dup['keep_id']))
+            print(f"✅ Cleaned up duplicates for: {dup['name']}")
+        
+        conn.commit()
+    except Exception as e:
+        print(f"⚠️  Cleanup warning: {e}")
+    finally:
+        conn.close()
+
+
 def seed_initial_data():
     """Seed initial office locations and admin user"""
     conn = get_db()
     cursor = conn.cursor()
     
-    # Check if locations already exist
-    cursor.execute('SELECT COUNT(*) as count FROM locations')
-    if cursor.fetchone()['count'] == 0:
-        # Insert default locations
-        locations = [
-            ('HSR Office', '🏢', '#4CAF50'),
-            ('MDP Office', '🏛️', '#2196F3'),
-            ('Intuit Office', '🏭', '#FF9800'),
-            ('Work From Home', '🏠', '#9C27B0'),
-            ('Day Off', '🌴', '#F44336')
-        ]
-        
-        cursor.executemany(
-            'INSERT INTO locations (name, emoji, color) VALUES (?, ?, ?)',
-            locations
-        )
-        print("✅ Seeded office locations")
+    # Insert default locations (OR IGNORE if already exist)
+    locations = [
+        ('HSR Office', '🏢', '#4CAF50'),
+        ('MDP Office', '🏛️', '#2196F3'),
+        ('Intuit Office', '🏭', '#FF9800'),
+        ('Work From Home', '🏠', '#9C27B0'),
+        ('Day Off', '🌴', '#F44336')
+    ]
     
-    # Check if admin user exists
-    cursor.execute('SELECT COUNT(*) as count FROM users')
+    cursor.executemany(
+        'INSERT OR IGNORE INTO locations (name, emoji, color) VALUES (?, ?, ?)',
+        locations
+    )
+    
+    # Check if admin user exists (by email)
+    cursor.execute('SELECT COUNT(*) as count FROM users WHERE email = ?', ('admin@company.com',))
     if cursor.fetchone()['count'] == 0:
         # Create default admin user
         admin_password = generate_password_hash('admin123')
@@ -135,7 +161,6 @@ def seed_initial_data():
             INSERT INTO users (email, name, password_hash, is_admin)
             VALUES (?, ?, ?, ?)
         ''', ('admin@company.com', 'Admin User', admin_password, True))
-        print("✅ Created admin user (admin@company.com / admin123)")
     
     conn.commit()
     conn.close()
@@ -602,6 +627,7 @@ def setup_scheduler():
 # Initialize database and scheduler (for production/gunicorn)
 try:
     init_db()
+    cleanup_duplicate_locations()  # Clean up any duplicates
     seed_initial_data()
     setup_scheduler()
     scheduler.start()
