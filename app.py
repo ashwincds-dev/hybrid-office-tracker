@@ -8,7 +8,8 @@ from flask import Flask, render_template, request, jsonify, redirect, url_for, s
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 from datetime import datetime, timedelta, date
-import sqlite3
+import psycopg2
+import psycopg2.extras
 import os
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -22,11 +23,8 @@ app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-producti
 with open('config.yaml', 'r') as f:
     config = yaml.safe_load(f)
 
-# Database path
-DATABASE = 'data/office_tracker.db'
-
-# Ensure data directory exists
-os.makedirs('data', exist_ok=True)
+# Database URL (PostgreSQL)
+DATABASE_URL = os.environ.get('DATABASE_URL')
 
 # Scheduler
 scheduler = BackgroundScheduler()
@@ -36,8 +34,8 @@ timezone = pytz.timezone(config['schedule']['timezone'])
 # Database helper functions
 def get_db():
     """Get database connection"""
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
+    conn = psycopg2.connect(DATABASE_URL)
+    conn.cursor_factory = psycopg2.extras.DictCursor
     return conn
 
 
@@ -49,35 +47,35 @@ def init_db():
     # Users table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT UNIQUE NOT NULL,
-            name TEXT NOT NULL,
-            password_hash TEXT NOT NULL,
-            is_admin BOOLEAN DEFAULT 0,
-            is_active BOOLEAN DEFAULT 1,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            id SERIAL PRIMARY KEY,
+            email VARCHAR(255) UNIQUE NOT NULL,
+            name VARCHAR(255) NOT NULL,
+            password_hash VARCHAR(255) NOT NULL,
+            is_admin BOOLEAN DEFAULT FALSE,
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
     
     # Office locations table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS locations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE,
-            emoji TEXT NOT NULL,
-            color TEXT NOT NULL,
-            is_active BOOLEAN DEFAULT 1
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(255) NOT NULL UNIQUE,
+            emoji VARCHAR(10) NOT NULL,
+            color VARCHAR(20) NOT NULL,
+            is_active BOOLEAN DEFAULT TRUE
         )
     ''')
     
     # Responses table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS responses (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             user_id INTEGER NOT NULL,
             location_id INTEGER NOT NULL,
             date DATE NOT NULL,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id),
             FOREIGN KEY (location_id) REFERENCES locations(id),
             UNIQUE(user_id, date)
@@ -87,10 +85,10 @@ def init_db():
     # Notifications log
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS notifications (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             user_id INTEGER,
-            type TEXT NOT NULL,
-            sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            type VARCHAR(50) NOT NULL,
+            sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
     ''')
@@ -122,7 +120,7 @@ def cleanup_duplicate_locations():
             # Delete all duplicates except the first one
             cursor.execute('''
                 DELETE FROM locations 
-                WHERE name = ? AND id != ?
+                WHERE name = %s AND id != %s
             ''', (dup['name'], dup['keep_id']))
             print(f"✅ Cleaned up duplicates for: {dup['name']}")
         
@@ -148,18 +146,18 @@ def seed_initial_data():
     ]
     
     cursor.executemany(
-        'INSERT OR IGNORE INTO locations (name, emoji, color) VALUES (?, ?, ?)',
+        'INSERT OR IGNORE INTO locations (name, emoji, color) VALUES (%s, %s, %s)',
         locations
     )
     
     # Check if admin user exists (by email)
-    cursor.execute('SELECT COUNT(*) as count FROM users WHERE email = ?', ('admin@company.com',))
+    cursor.execute('SELECT COUNT(*) as count FROM users WHERE email = %s', ('admin@company.com',))
     if cursor.fetchone()['count'] == 0:
         # Create default admin user
         admin_password = generate_password_hash('admin123')
         cursor.execute('''
             INSERT INTO users (email, name, password_hash, is_admin)
-            VALUES (?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s)
         ''', ('admin@company.com', 'Admin User', admin_password, True))
     
     conn.commit()
@@ -184,7 +182,7 @@ def admin_required(f):
         
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute('SELECT is_admin FROM users WHERE id = ?', (session['user_id'],))
+        cursor.execute('SELECT is_admin FROM users WHERE id = %s', (session['user_id'],))
         user = cursor.fetchone()
         conn.close()
         
@@ -213,7 +211,7 @@ def login():
         
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute('SELECT * FROM users WHERE email = ? AND is_active = 1', (email,))
+        cursor.execute('SELECT * FROM users WHERE email = %s AND is_active = TRUE', (email,))
         user = cursor.fetchone()
         conn.close()
         
@@ -265,7 +263,7 @@ def change_password():
         # Verify current password
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute('SELECT password_hash FROM users WHERE id = ?', (session['user_id'],))
+        cursor.execute('SELECT password_hash FROM users WHERE id = %s', (session['user_id'],))
         user = cursor.fetchone()
         
         if not user or not check_password_hash(user['password_hash'], current_password):
@@ -275,7 +273,7 @@ def change_password():
         
         # Update password
         new_password_hash = generate_password_hash(new_password)
-        cursor.execute('UPDATE users SET password_hash = ? WHERE id = ?', 
+        cursor.execute('UPDATE users SET password_hash = ? WHERE id = %s', 
                       (new_password_hash, session['user_id']))
         conn.commit()
         conn.close()
@@ -303,7 +301,7 @@ def register():
         cursor = conn.cursor()
         
         # Check if email already exists
-        cursor.execute('SELECT id FROM users WHERE email = ?', (email,))
+        cursor.execute('SELECT id FROM users WHERE email = %s', (email,))
         if cursor.fetchone():
             flash('Email already registered', 'error')
             conn.close()
@@ -313,7 +311,7 @@ def register():
         password_hash = generate_password_hash(password)
         cursor.execute('''
             INSERT INTO users (email, name, password_hash)
-            VALUES (?, ?, ?)
+            VALUES (%s, %s, %s)
         ''', (email, name, password_hash))
         
         conn.commit()
@@ -355,7 +353,7 @@ def dashboard():
     tomorrow_location = cursor.fetchone()
     
     # Get all active locations
-    cursor.execute('SELECT * FROM locations WHERE is_active = 1')
+    cursor.execute('SELECT * FROM locations WHERE is_active = TRUE')
     locations = cursor.fetchall()
     
     # Get today's summary
@@ -363,7 +361,7 @@ def dashboard():
         SELECT l.name, l.emoji, l.color, COUNT(*) as count
         FROM responses r
         JOIN locations l ON r.location_id = l.id
-        WHERE r.date = ?
+        WHERE r.date = %s
         GROUP BY l.id
         ORDER BY count DESC
     ''', (today,))
@@ -375,7 +373,7 @@ def dashboard():
         FROM responses r
         JOIN users u ON r.user_id = u.id
         JOIN locations l ON r.location_id = l.id
-        WHERE r.date = ? AND u.is_active = 1
+        WHERE r.date = %s AND u.is_active = TRUE
         ORDER BY l.name, u.name
     ''', (today,))
     team_locations = cursor.fetchall()
@@ -408,9 +406,9 @@ def set_location():
     # Insert or update response
     cursor.execute('''
         INSERT INTO responses (user_id, location_id, date)
-        VALUES (?, ?, ?)
+        VALUES (%s, %s, %s)
         ON CONFLICT(user_id, date)
-        DO UPDATE SET location_id = ?, timestamp = CURRENT_TIMESTAMP
+        DO UPDATE SET location_id = %s, timestamp = CURRENT_TIMESTAMP
     ''', (session['user_id'], location_id, target_date, location_id))
     
     conn.commit()
@@ -438,7 +436,7 @@ def summary(date_str):
         SELECT l.name, l.emoji, l.color, COUNT(*) as count
         FROM responses r
         JOIN locations l ON r.location_id = l.id
-        WHERE r.date = ?
+        WHERE r.date = %s
         GROUP BY l.id
         ORDER BY count DESC
     ''', (target_date,))
@@ -450,7 +448,7 @@ def summary(date_str):
         FROM responses r
         JOIN users u ON r.user_id = u.id
         JOIN locations l ON r.location_id = l.id
-        WHERE r.date = ? AND u.is_active = 1
+        WHERE r.date = %s AND u.is_active = TRUE
         ORDER BY l.name, u.name
     ''', (target_date,))
     detailed_list = cursor.fetchall()
@@ -459,9 +457,9 @@ def summary(date_str):
     cursor.execute('''
         SELECT u.name
         FROM users u
-        WHERE u.is_active = 1
+        WHERE u.is_active = TRUE
         AND u.id NOT IN (
-            SELECT user_id FROM responses WHERE date = ?
+            SELECT user_id FROM responses WHERE date = %s
         )
         ORDER BY u.name
     ''', (target_date,))
@@ -524,10 +522,10 @@ def admin_panel():
     locations = cursor.fetchall()
     
     # Get statistics
-    cursor.execute('SELECT COUNT(*) as total FROM users WHERE is_active = 1')
+    cursor.execute('SELECT COUNT(*) as total FROM users WHERE is_active = TRUE')
     stats = {'active_users': cursor.fetchone()['total']}
     
-    cursor.execute('SELECT COUNT(*) as total FROM responses WHERE date = ?', (date.today(),))
+    cursor.execute('SELECT COUNT(*) as total FROM responses WHERE date = %s', (date.today(),))
     stats['responses_today'] = cursor.fetchone()['total']
     
     conn.close()
@@ -566,10 +564,10 @@ def admin_calendar_view():
     locations = cursor.fetchall()
     
     # Get statistics
-    cursor.execute('SELECT COUNT(*) as total FROM users WHERE is_active = 1')
+    cursor.execute('SELECT COUNT(*) as total FROM users WHERE is_active = TRUE')
     stats = {'active_users': cursor.fetchone()['total']}
     
-    cursor.execute('SELECT COUNT(*) as total FROM responses WHERE date = ?', (date.today(),))
+    cursor.execute('SELECT COUNT(*) as total FROM responses WHERE date = %s', (date.today(),))
     stats['responses_today'] = cursor.fetchone()['total']
     
     # Get calendar data for selected date
@@ -584,7 +582,7 @@ def admin_calendar_view():
         FROM responses r
         JOIN users u ON r.user_id = u.id
         JOIN locations l ON r.location_id = l.id
-        WHERE r.date = ? AND u.is_active = 1
+        WHERE r.date = %s AND u.is_active = TRUE
         ORDER BY l.name, u.name
     ''', (selected_date,))
     
@@ -600,7 +598,7 @@ def admin_calendar_view():
         FROM responses r
         JOIN locations l ON r.location_id = l.id
         JOIN users u ON r.user_id = u.id
-        WHERE r.date = ? AND u.is_active = 1
+        WHERE r.date = %s AND u.is_active = TRUE
         GROUP BY l.id
         ORDER BY count DESC, l.name
     ''', (selected_date,))
@@ -611,9 +609,9 @@ def admin_calendar_view():
     cursor.execute('''
         SELECT u.id, u.name, u.email
         FROM users u
-        WHERE u.is_active = 1
+        WHERE u.is_active = TRUE
         AND u.id NOT IN (
-            SELECT user_id FROM responses WHERE date = ?
+            SELECT user_id FROM responses WHERE date = %s
         )
         ORDER BY u.name
     ''', (selected_date,))
@@ -641,7 +639,7 @@ def toggle_user(user_id):
     conn = get_db()
     cursor = conn.cursor()
     
-    cursor.execute('UPDATE users SET is_active = NOT is_active WHERE id = ?', (user_id,))
+    cursor.execute('UPDATE users SET is_active = NOT is_active WHERE id = %s', (user_id,))
     conn.commit()
     conn.close()
     
@@ -680,7 +678,7 @@ def export_calendar():
         FROM responses r
         JOIN users u ON r.user_id = u.id
         JOIN locations l ON r.location_id = l.id
-        WHERE r.date BETWEEN ? AND ?
+        WHERE r.date BETWEEN %s AND %s
         ORDER BY r.date DESC, u.name
     ''', (start_date, end_date))
     
@@ -739,7 +737,7 @@ def api_locations():
     """Get all active locations"""
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute('SELECT * FROM locations WHERE is_active = 1')
+    cursor.execute('SELECT * FROM locations WHERE is_active = TRUE')
     locations = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return jsonify(locations)
@@ -758,7 +756,7 @@ def api_summary(date_str):
         FROM responses r
         JOIN users u ON r.user_id = u.id
         JOIN locations l ON r.location_id = l.id
-        WHERE r.date = ? AND u.is_active = 1
+        WHERE r.date = %s AND u.is_active = TRUE
         GROUP BY l.id
     ''', (date_str,))
     
@@ -806,9 +804,9 @@ def send_evening_reminders():
     cursor.execute('''
         SELECT u.id, u.email, u.name
         FROM users u
-        WHERE u.is_active = 1
+        WHERE u.is_active = TRUE
         AND u.id NOT IN (
-            SELECT user_id FROM responses WHERE date = ?
+            SELECT user_id FROM responses WHERE date = %s
         )
     ''', (tomorrow,))
     
@@ -818,7 +816,7 @@ def send_evening_reminders():
         # Log reminder (in production, send actual email)
         cursor.execute('''
             INSERT INTO notifications (user_id, type)
-            VALUES (?, 'evening_reminder')
+            VALUES (%s, 'evening_reminder')
         ''', (user['id'],))
         print(f"📧 Would send reminder to {user['name']} ({user['email']})")
     
