@@ -238,6 +238,54 @@ def logout():
     return redirect(url_for('index'))
 
 
+@app.route('/change-password', methods=['GET', 'POST'])
+@login_required
+def change_password():
+    """Change user password"""
+    if request.method == 'POST':
+        current_password = request.form.get('current_password')
+        new_password = request.form.get('new_password')
+        confirm_password = request.form.get('confirm_password')
+        
+        # Validate inputs
+        if not current_password or not new_password or not confirm_password:
+            flash('All fields are required', 'error')
+            return render_template('change_password.html')
+        
+        # Check if new passwords match
+        if new_password != confirm_password:
+            flash('New passwords do not match', 'error')
+            return render_template('change_password.html')
+        
+        # Check minimum length
+        if len(new_password) < 6:
+            flash('Password must be at least 6 characters long', 'error')
+            return render_template('change_password.html')
+        
+        # Verify current password
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('SELECT password_hash FROM users WHERE id = ?', (session['user_id'],))
+        user = cursor.fetchone()
+        
+        if not user or not check_password_hash(user['password_hash'], current_password):
+            conn.close()
+            flash('Current password is incorrect', 'error')
+            return render_template('change_password.html')
+        
+        # Update password
+        new_password_hash = generate_password_hash(new_password)
+        cursor.execute('UPDATE users SET password_hash = ? WHERE id = ?', 
+                      (new_password_hash, session['user_id']))
+        conn.commit()
+        conn.close()
+        
+        flash('Password updated successfully!', 'success')
+        return redirect(url_for('dashboard'))
+    
+    return render_template('change_password.html')
+
+
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     """User registration"""
