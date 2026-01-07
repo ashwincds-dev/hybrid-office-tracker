@@ -507,7 +507,7 @@ def calendar():
 @app.route('/admin')
 @admin_required
 def admin_panel():
-    """Admin panel"""
+    """Admin panel with optional calendar view"""
     conn = get_db()
     cursor = conn.cursor()
     
@@ -532,7 +532,106 @@ def admin_panel():
     
     conn.close()
     
-    return render_template('admin.html', users=users, locations=locations, stats=stats)
+    return render_template('admin.html', users=users, locations=locations, stats=stats, 
+                         today=date.today(), timedelta=timedelta, 
+                         selected_date=None, calendar_data=None, 
+                         calendar_summary=None, users_without_location=None)
+
+
+@app.route('/admin/calendar-view')
+@admin_required
+def admin_calendar_view():
+    """Admin calendar view for a specific date"""
+    selected_date_str = request.args.get('date', date.today().strftime('%Y-%m-%d'))
+    
+    try:
+        selected_date = datetime.strptime(selected_date_str, '%Y-%m-%d').date()
+    except ValueError:
+        flash('Invalid date format', 'error')
+        return redirect(url_for('admin_panel'))
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # Get all users
+    cursor.execute('''
+        SELECT id, email, name, is_admin, is_active, created_at
+        FROM users
+        ORDER BY name
+    ''')
+    users = cursor.fetchall()
+    
+    # Get all locations
+    cursor.execute('SELECT * FROM locations ORDER BY name')
+    locations = cursor.fetchall()
+    
+    # Get statistics
+    cursor.execute('SELECT COUNT(*) as total FROM users WHERE is_active = 1')
+    stats = {'active_users': cursor.fetchone()['total']}
+    
+    cursor.execute('SELECT COUNT(*) as total FROM responses WHERE date = ?', (date.today(),))
+    stats['responses_today'] = cursor.fetchone()['total']
+    
+    # Get calendar data for selected date
+    cursor.execute('''
+        SELECT 
+            r.date,
+            u.name as user_name,
+            u.email as user_email,
+            l.name as location_name,
+            l.emoji as location_emoji,
+            l.color as location_color
+        FROM responses r
+        JOIN users u ON r.user_id = u.id
+        JOIN locations l ON r.location_id = l.id
+        WHERE r.date = ? AND u.is_active = 1
+        ORDER BY l.name, u.name
+    ''', (selected_date,))
+    
+    calendar_data = cursor.fetchall()
+    
+    # Get summary by location
+    cursor.execute('''
+        SELECT 
+            l.name as name,
+            l.emoji as emoji,
+            l.color as color,
+            COUNT(*) as count
+        FROM responses r
+        JOIN locations l ON r.location_id = l.id
+        JOIN users u ON r.user_id = u.id
+        WHERE r.date = ? AND u.is_active = 1
+        GROUP BY l.id
+        ORDER BY count DESC, l.name
+    ''', (selected_date,))
+    
+    calendar_summary = cursor.fetchall()
+    
+    # Get users who haven't set location for this date
+    cursor.execute('''
+        SELECT u.id, u.name, u.email
+        FROM users u
+        WHERE u.is_active = 1
+        AND u.id NOT IN (
+            SELECT user_id FROM responses WHERE date = ?
+        )
+        ORDER BY u.name
+    ''', (selected_date,))
+    
+    users_without_location = cursor.fetchall()
+    
+    conn.close()
+    
+    return render_template('admin.html', 
+                         users=users, 
+                         locations=locations, 
+                         stats=stats, 
+                         today=date.today(), 
+                         timedelta=timedelta,
+                         selected_date=selected_date,
+                         calendar_data=calendar_data,
+                         calendar_summary=calendar_summary,
+                         users_without_location=users_without_location)
 
 
 @app.route('/admin/users/toggle/<int:user_id>', methods=['POST'])
@@ -548,6 +647,89 @@ def toggle_user(user_id):
     
     flash('User status updated', 'success')
     return redirect(url_for('admin_panel'))
+
+
+@app.route('/admin/export-calendar')
+@admin_required
+def export_calendar():
+    """Export calendar data for admin"""
+    from io import StringIO
+    import csv
+    
+    start_date = request.args.get('start_date', date.today() - timedelta(days=30))
+    end_date = request.args.get('end_date', date.today())
+    export_format = request.args.get('format', 'csv')
+    
+    # Convert string dates to date objects if needed
+    if isinstance(start_date, str):
+        start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+    if isinstance(end_date, str):
+        end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # Get all responses in date range with user and location info
+    cursor.execute('''
+        SELECT 
+            r.date,
+            u.name as user_name,
+            u.email as user_email,
+            l.name as location_name,
+            l.emoji as location_emoji
+        FROM responses r
+        JOIN users u ON r.user_id = u.id
+        JOIN locations l ON r.location_id = l.id
+        WHERE r.date BETWEEN ? AND ?
+        ORDER BY r.date DESC, u.name
+    ''', (start_date, end_date))
+    
+    data = cursor.fetchall()
+    conn.close()
+    
+    if export_format == 'csv':
+        # Generate CSV
+        si = StringIO()
+        writer = csv.writer(si)
+        
+        # Write header
+        writer.writerow(['Date', 'Day', 'Employee Name', 'Email', 'Location'])
+        
+        # Write data
+        for row in data:
+            row_date = datetime.strptime(row['date'], '%Y-%m-%d').date() if isinstance(row['date'], str) else row['date']
+            day_name = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][row_date.weekday()]
+            writer.writerow([
+                row['date'],
+                day_name,
+                row['user_name'],
+                row['user_email'],
+                f"{row['location_emoji']} {row['location_name']}"
+            ])
+        
+        # Create response
+        output = si.getvalue()
+        si.close()
+        
+        from flask import make_response
+        response = make_response(output)
+        response.headers['Content-Type'] = 'text/csv'
+        response.headers['Content-Disposition'] = f'attachment; filename=office-locations-{start_date}-to-{end_date}.csv'
+        return response
+    
+    else:  # HTML format
+        # Group by date for better visualization
+        data_by_date = {}
+        for row in data:
+            row_date = row['date']
+            if row_date not in data_by_date:
+                data_by_date[row_date] = []
+            data_by_date[row_date].append(row)
+        
+        return render_template('export_calendar.html', 
+                             data_by_date=data_by_date, 
+                             start_date=start_date, 
+                             end_date=end_date)
 
 
 # API endpoints

@@ -27,6 +27,231 @@
     </div>
 </div>
 
+<!-- Export Reports -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="bi bi-download"></i> Export Location Reports
+                </h5>
+                <p class="text-muted">Download team location data for analysis and record-keeping</p>
+                
+                <form method="GET" action="{{ url_for('export_calendar') }}" class="row g-3">
+                    <div class="col-md-4">
+                        <label for="start_date" class="form-label">Start Date</label>
+                        <input type="date" class="form-control" id="start_date" name="start_date" 
+                               value="{{ (today - timedelta(days=30)).strftime('%Y-%m-%d') }}" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="end_date" class="form-label">End Date</label>
+                        <input type="date" class="form-control" id="end_date" name="end_date" 
+                               value="{{ today.strftime('%Y-%m-%d') }}" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="format" class="form-label">Format</label>
+                        <select class="form-control" id="format" name="format">
+                            <option value="csv">CSV (Excel)</option>
+                            <option value="html">HTML (View in Browser)</option>
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-download"></i> Download Report
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="setThisWeek()">
+                            <i class="bi bi-calendar-week"></i> This Week
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="setThisMonth()">
+                            <i class="bi bi-calendar-month"></i> This Month
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function setThisWeek() {
+    const today = new Date();
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - today.getDay() + 1);
+    const friday = new Date(today);
+    friday.setDate(today.getDate() - today.getDay() + 5);
+    
+    document.getElementById('start_date').value = monday.toISOString().split('T')[0];
+    document.getElementById('end_date').value = friday.toISOString().split('T')[0];
+}
+
+function setThisMonth() {
+    const today = new Date();
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    
+    document.getElementById('start_date').value = firstDay.toISOString().split('T')[0];
+    document.getElementById('end_date').value = lastDay.toISOString().split('T')[0];
+}
+</script>
+
+<!-- Calendar View -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="bi bi-calendar3"></i> Team Calendar View
+                </h5>
+                <p class="text-muted">View all employee locations for any date</p>
+                
+                <form method="GET" action="{{ url_for('admin_calendar_view') }}" class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                        <label for="view_date" class="form-label">Select Date</label>
+                        <input type="date" class="form-control" id="view_date" name="date" 
+                               value="{{ selected_date.strftime('%Y-%m-%d') if selected_date else today.strftime('%Y-%m-%d') }}" required>
+                    </div>
+                    <div class="col-md-8">
+                        <button type="submit" class="btn btn-primary me-2">
+                            <i class="bi bi-search"></i> View Date
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary me-2" onclick="setViewToday()">
+                            <i class="bi bi-calendar-day"></i> Today
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary me-2" onclick="setViewTomorrow()">
+                            <i class="bi bi-calendar-plus"></i> Tomorrow
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="setViewNextMonday()">
+                            <i class="bi bi-calendar-week"></i> Next Monday
+                        </button>
+                    </div>
+                </form>
+                
+                {% if selected_date and calendar_data %}
+                <hr class="my-4">
+                
+                <div class="mb-3">
+                    <h4>
+                        <i class="bi bi-calendar-check"></i> 
+                        {{ selected_date.strftime('%A, %B %d, %Y') }}
+                        {% if selected_date == today %}
+                            <span class="badge bg-success">Today</span>
+                        {% elif selected_date == today + timedelta(days=1) %}
+                            <span class="badge bg-primary">Tomorrow</span>
+                        {% elif selected_date < today %}
+                            <span class="badge bg-secondary">Past</span>
+                        {% else %}
+                            <span class="badge bg-info">Upcoming</span>
+                        {% endif %}
+                    </h4>
+                </div>
+                
+                <!-- Summary Cards -->
+                <div class="row mb-4">
+                    {% for location in calendar_summary %}
+                    <div class="col-md-3 mb-3">
+                        <div class="card h-100" style="border-left: 4px solid {{ location['color'] }}">
+                            <div class="card-body text-center">
+                                <div style="font-size: 2.5rem;">{{ location['emoji'] }}</div>
+                                <h3 class="mb-0">{{ location['count'] }}</h3>
+                                <p class="text-muted mb-0">{{ location['name'] }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    
+                    {% if calendar_data|length < stats.active_users %}
+                    <div class="col-md-3 mb-3">
+                        <div class="card h-100 border-warning">
+                            <div class="card-body text-center">
+                                <div style="font-size: 2.5rem;">❓</div>
+                                <h3 class="mb-0">{{ stats.active_users - calendar_data|length }}</h3>
+                                <p class="text-muted mb-0">Not Set</p>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <!-- Detailed List by Location -->
+                <h6 class="mb-3">Detailed Breakdown:</h6>
+                <div class="row">
+                    {% for location in calendar_summary %}
+                    <div class="col-md-6 mb-3">
+                        <div class="card">
+                            <div class="card-header" style="background-color: {{ location['color'] }}15; border-left: 4px solid {{ location['color'] }}">
+                                <h6 class="mb-0">
+                                    <span style="font-size: 1.5rem;">{{ location['emoji'] }}</span>
+                                    {{ location['name'] }}
+                                    <span class="badge" style="background-color: {{ location['color'] }}">{{ location['count'] }}</span>
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <ul class="list-unstyled mb-0">
+                                    {% for entry in calendar_data %}
+                                        {% if entry['location_name'] == location['name'] %}
+                                        <li class="mb-2">
+                                            <i class="bi bi-person-circle"></i> 
+                                            <strong>{{ entry['user_name'] }}</strong>
+                                            <br>
+                                            <small class="text-muted ms-3">{{ entry['user_email'] }}</small>
+                                        </li>
+                                        {% endif %}
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                
+                <!-- Users who haven't set location -->
+                {% if users_without_location %}
+                <div class="alert alert-warning mt-3">
+                    <h6 class="alert-heading">
+                        <i class="bi bi-exclamation-triangle"></i> 
+                        {{ users_without_location|length }} user(s) haven't set their location for this date:
+                    </h6>
+                    <ul class="mb-0">
+                        {% for user in users_without_location %}
+                        <li>{{ user['name'] }} ({{ user['email'] }})</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+                
+                {% elif selected_date %}
+                <hr class="my-4">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> 
+                    No one has set their location for {{ selected_date.strftime('%A, %B %d, %Y') }} yet.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function setViewToday() {
+    const today = new Date();
+    document.getElementById('view_date').value = today.toISOString().split('T')[0];
+}
+
+function setViewTomorrow() {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    document.getElementById('view_date').value = tomorrow.toISOString().split('T')[0];
+}
+
+function setViewNextMonday() {
+    const today = new Date();
+    const daysUntilMonday = (8 - today.getDay()) % 7 || 7;
+    const nextMonday = new Date(today);
+    nextMonday.setDate(today.getDate() + daysUntilMonday);
+    document.getElementById('view_date').value = nextMonday.toISOString().split('T')[0];
+}
+</script>
+
 <!-- Users Management -->
 <div class="row">
     <div class="col-12">

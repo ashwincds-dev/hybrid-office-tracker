@@ -26,11 +26,17 @@
                         <h3>{{ today_location['name'] }}</h3>
                         <span class="badge" style="background-color: {{ today_location['color'] }}">Current Location</span>
                     </div>
+                    <button class="btn btn-outline-primary w-100 mt-3" data-bs-toggle="modal" data-bs-target="#setTodayLocationModal">
+                        <i class="bi bi-pencil"></i> Update Today's Location
+                    </button>
                 {% else %}
                     <div class="alert alert-warning">
                         <i class="bi bi-exclamation-triangle"></i> 
                         You haven't set your location for today
                     </div>
+                    <button class="btn btn-primary w-100" data-bs-toggle="modal" data-bs-target="#setTodayLocationModal">
+                        <i class="bi bi-plus-circle"></i> Set Location for Today
+                    </button>
                 {% endif %}
             </div>
         </div>
@@ -133,13 +139,45 @@
     </div>
 </div>
 
-<!-- Set Location Modal -->
+<!-- Set Today's Location Modal -->
+<div class="modal fade" id="setTodayLocationModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-geo-alt"></i> Set Today's Location
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="{{ url_for('set_location') }}">
+                    <input type="hidden" name="date" value="{{ today.strftime('%Y-%m-%d') }}">
+                    
+                    <p class="text-muted mb-3">Where are you today?</p>
+                    
+                    <div class="d-grid gap-2">
+                        {% for location in locations %}
+                        <button type="submit" name="location_id" value="{{ location['id'] }}" 
+                                class="btn btn-location text-start" 
+                                style="background-color: {{ location['color'] }}15; border: 2px solid {{ location['color'] }}; color: #333;">
+                            <span style="font-size: 1.5rem;">{{ location['emoji'] }}</span>
+                            <strong>{{ location['name'] }}</strong>
+                        </button>
+                        {% endfor %}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Set Tomorrow's Location Modal -->
 <div class="modal fade" id="setLocationModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">
-                    <i class="bi bi-geo-alt"></i> Set Your Location
+                    <i class="bi bi-geo-alt"></i> Set Tomorrow's Location
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
