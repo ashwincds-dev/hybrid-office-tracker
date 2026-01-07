@@ -145,10 +145,12 @@ def seed_initial_data():
         ('Day Off', '🌴', '#F44336')
     ]
     
-    cursor.executemany(
-        'INSERT OR IGNORE INTO locations (name, emoji, color) VALUES (%s, %s, %s)',
-        locations
-    )
+    for name, emoji, color in locations:
+        cursor.execute('''
+            INSERT INTO locations (name, emoji, color) 
+            VALUES (%s, %s, %s)
+            ON CONFLICT (name) DO NOTHING
+        ''', (name, emoji, color))
     
     # Check if admin user exists (by email)
     cursor.execute('SELECT COUNT(*) as count FROM users WHERE email = %s', ('admin@company.com',))
@@ -273,7 +275,7 @@ def change_password():
         
         # Update password
         new_password_hash = generate_password_hash(new_password)
-        cursor.execute('UPDATE users SET password_hash = ? WHERE id = %s', 
+        cursor.execute('UPDATE users SET password_hash = %s WHERE id = %s', 
                       (new_password_hash, session['user_id']))
         conn.commit()
         conn.close()
@@ -339,7 +341,7 @@ def dashboard():
         SELECT l.name, l.emoji, l.color
         FROM responses r
         JOIN locations l ON r.location_id = l.id
-        WHERE r.user_id = ? AND r.date = ?
+        WHERE r.user_id = %s AND r.date = %s
     ''', (session['user_id'], today))
     today_location = cursor.fetchone()
     
@@ -348,7 +350,7 @@ def dashboard():
         SELECT l.id, l.name, l.emoji, l.color
         FROM responses r
         JOIN locations l ON r.location_id = l.id
-        WHERE r.user_id = ? AND r.date = ?
+        WHERE r.user_id = %s AND r.date = %s
     ''', (session['user_id'], tomorrow))
     tomorrow_location = cursor.fetchone()
     
@@ -489,7 +491,7 @@ def calendar():
         SELECT r.date, l.name, l.emoji, l.color
         FROM responses r
         JOIN locations l ON r.location_id = l.id
-        WHERE r.user_id = ? AND r.date BETWEEN ? AND ?
+        WHERE r.user_id = %s AND r.date BETWEEN %s AND %s
         ORDER BY r.date
     ''', (session['user_id'], start_date, end_date))
     
