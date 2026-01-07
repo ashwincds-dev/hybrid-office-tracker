@@ -25,6 +25,9 @@ with open('config.yaml', 'r') as f:
 # Database path
 DATABASE = 'data/office_tracker.db'
 
+# Ensure data directory exists
+os.makedirs('data', exist_ok=True)
+
 # Scheduler
 scheduler = BackgroundScheduler()
 timezone = pytz.timezone(config['schedule']['timezone'])
@@ -594,6 +597,17 @@ def setup_scheduler():
     )
     
     print(f"✅ Scheduled evening reminders at {config['schedule']['evening_reminder']} {timezone}")
+
+
+# Initialize database and scheduler (for production/gunicorn)
+try:
+    init_db()
+    seed_initial_data()
+    setup_scheduler()
+    scheduler.start()
+    print("✅ App initialized (database + scheduler)")
+except Exception as e:
+    print(f"⚠️  Initialization warning: {e}")
 
 
 if __name__ == '__main__':
