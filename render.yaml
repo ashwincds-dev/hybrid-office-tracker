@@ -11,12 +11,4 @@ services:
       - key: PYTHON_VERSION
         value: "3.11"
       - key: DATABASE_URL
-        fromDatabase:
-          name: office-tracker-db
-          property: connectionString
-
-databases:
-  - name: office-tracker-db
-    databaseName: office_tracker
-    user: office_tracker_user
-    plan: free
+        sync: false  # Will be set manually in Render dashboard to Supabase connection string
